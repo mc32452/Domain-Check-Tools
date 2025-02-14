@@ -490,10 +490,8 @@ with tabs[4]:
             st.download_button("Download Table as CSV", df_all.to_csv(index=False),
                                file_name=f"Advanced_Check_Results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
 
-            # Save the raw results for advanced statistics in session state
             st.session_state["all_results"] = all_results
 
-    # Display the advanced statistics inside an expander (initially closed)
     if "all_results" in st.session_state:
         with st.expander("View Statistics"):
             all_results = st.session_state["all_results"]
