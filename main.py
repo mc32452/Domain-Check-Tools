@@ -285,8 +285,9 @@ async def run_all_in_one_checks(domains, timeout, concurrency, retries, dns_reco
 st.set_page_config(page_title="Domain Checker", layout="wide")
 st.title("Domain Checker")
 
-tabs = st.tabs(["HTTP Check", "DNS Lookup", "WHOIS Check", "TLS/SSL Certificate Check", "All In One"])
+tabs = st.tabs(["HTTP Check", "DNS Lookup", "WHOIS Check", "TLS/SSL Certificate Check", "Advanced Check"])
 
+# --------------------- HTTP Check Tab --------------------- #
 with tabs[0]:
     st.header("HTTP Check")
     with st.form("http_form"):
@@ -308,11 +309,14 @@ with tabs[0]:
                          "Attempts", "Response Received", "Redirect History", "Redirected"]
             )
             st.write("### HTTP Check Results", df_http)
-            csv_buffer = io.StringIO()
-            df_http.to_csv(csv_buffer, index=False)
-            st.download_button("Download HTTP CSV", csv_buffer.getvalue(),
-                               file_name="http_results.csv", mime="text/csv")
+            st.session_state["http_df"] = df_http
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button("Download Table as CSV", df_http.to_csv(index=False),
+                               file_name=f"HTTP_Check_Results_{timestamp}.csv", mime="text/csv")
+    elif "http_df" in st.session_state:
+        st.write("### HTTP Check Results", st.session_state["http_df"])
 
+# --------------------- DNS Lookup Tab --------------------- #
 with tabs[1]:
     st.header("DNS Lookup")
     with st.form("dns_form"):
@@ -361,11 +365,16 @@ with tabs[1]:
             st.subheader("Statistics")
             st.write(f"**Time Taken:** {elapsed_time:.2f} seconds")
             st.write(f"**Processing Speed:** {domains_per_second:.2f} domains/second")
-            st.download_button("Download DNS CSV", data=csv_data, file_name="dns_lookup_results.csv", mime="text/csv")
+            st.download_button("Download Table as CSV", data=csv_data,
+                               file_name=f"DNS_Lookup_Results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
             st.subheader("DNS Results")
             df_dns = pd.DataFrame(data_rows, columns=header)
-            st.dataframe(df_dns, use_container_width=True)
+            st.write(df_dns)
+            st.session_state["dns_df"] = df_dns
+    elif "dns_df" in st.session_state:
+        st.write("DNS Results", st.session_state["dns_df"])
 
+# --------------------- WHOIS Check Tab --------------------- #
 with tabs[2]:
     st.header("WHOIS Check")
     with st.form("whois_form"):
@@ -385,10 +394,13 @@ with tabs[2]:
             if "WHOIS Error" in df_whois.columns and df_whois["WHOIS Error"].astype(str).str.strip().eq("").all():
                 df_whois.drop(columns=["WHOIS Error"], inplace=True)
             st.write("### WHOIS Results", df_whois)
-            csv_buffer = io.StringIO()
-            df_whois.to_csv(csv_buffer, index=False)
-            st.download_button("Download WHOIS CSV", csv_buffer.getvalue(), file_name="whois_results.csv", mime="text/csv")
+            st.session_state["whois_df"] = df_whois
+            st.download_button("Download Table as CSV", df_whois.to_csv(index=False),
+                               file_name=f"WHOIS_Results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
+    elif "whois_df" in st.session_state:
+        st.write("### WHOIS Results", st.session_state["whois_df"])
 
+# --------------------- TLS/SSL Certificate Check Tab --------------------- #
 with tabs[3]:
     st.header("TLS/SSL Certificate Check")
     with st.form("cert_form"):
@@ -408,28 +420,31 @@ with tabs[3]:
             if "Certificate Error" in df_cert.columns and df_cert["Certificate Error"].astype(str).str.strip().eq("").all():
                 df_cert.drop(columns=["Certificate Error"], inplace=True)
             st.write("### TLS/SSL Certificate Check Results", df_cert)
-            csv_buffer = io.StringIO()
-            df_cert.to_csv(csv_buffer, index=False)
-            st.download_button("Download TLS/SSL Certificate CSV", csv_buffer.getvalue(), file_name="tls_ssl_certificate_results.csv", mime="text/csv")
+            st.session_state["cert_df"] = df_cert
+            st.download_button("Download Table as CSV", df_cert.to_csv(index=False),
+                               file_name=f"TLS_SSL_Certificate_Results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
+    elif "cert_df" in st.session_state:
+        st.write("### TLS/SSL Certificate Check Results", st.session_state["cert_df"])
 
+# --------------------- Advanced Check Tab --------------------- #
 with tabs[4]:
-    st.header("All In One Check")
+    st.header("Advanced Check")
     with st.form("all_form"):
         domains_input_all = st.text_area("Enter one or more domains (one per line):", height=200)
-        whois_enabled = st.checkbox("Enable WHOIS Lookup", value=False, key="all_whois_enabled")
+        whois_enabled = st.checkbox("Enable WHOIS Lookup *(Slows Down Large Batches)*", value=False, key="all_whois_enabled")
         cert_enabled = st.checkbox("Enable TLS/SSL Certificate Check", value=False, key="all_cert_enabled")
-        with st.expander("Selected DNS Record Types", expanded=False):
-            record_options_all = ["A", "AAAA", "CNAME", "MX", "NS", "SOA", "TXT"]
-            selected_dns_all = []
-            cols = st.columns(4)
-            for i, rtype in enumerate(record_options_all):
-                col = cols[i % 4]
-                if col.checkbox(rtype, value=True, key=f"all_checkbox_{rtype}"):
-                    selected_dns_all.append(rtype)
+        st.markdown("### Select DNS Record Types")
+        record_options_all = ["A", "AAAA", "CNAME", "MX", "NS", "SOA", "TXT"]
+        selected_dns_all = []
+        cols = st.columns(4)
+        for i, rtype in enumerate(record_options_all):
+            col = cols[i % 4]
+            if col.checkbox(rtype, value=True, key=f"all_checkbox_{rtype}"):
+                selected_dns_all.append(rtype)
         timeout_all = st.number_input("HTTP Timeout (seconds)", min_value=1, value=10, step=1)
         concurrency_all = st.number_input("HTTP Concurrency", min_value=1, value=20, step=1)
         retries_all = st.number_input("HTTP Retries", min_value=1, value=3, step=1)
-        submit_all = st.form_submit_button("Run All Checks")
+        submit_all = st.form_submit_button("Run Advanced Check")
     if submit_all:
         if not domains_input_all.strip():
             st.error("Please enter at least one domain.")
@@ -443,9 +458,15 @@ with tabs[4]:
             if cert_enabled:
                 enabled_checks += ", TLS/SSL Certificate Check"
             st.info(f"Starting All In One checks ({enabled_checks})...")
+
+            start_time_all = time.time()
             all_results = asyncio.run(
                 run_all_in_one_checks(domains_all, timeout_all, concurrency_all, retries_all, selected_dns_all, whois_enabled, cert_enabled)
             )
+            end_time_all = time.time()
+            elapsed_all = end_time_all - start_time_all
+            st.write(f"**Total Time Taken:** {elapsed_all:.2f} seconds")
+
             columns = ["Domain", "HTTP Status"]
             if cert_enabled:
                 columns.extend(["Certificate Expiry Date", "Days Until Expiry"])
@@ -464,7 +485,32 @@ with tabs[4]:
                 df_all.drop(columns=["WHOIS Error"], inplace=True)
             if "Certificate Error" in df_all.columns and df_all["Certificate Error"].astype(str).str.strip().eq("").all():
                 df_all.drop(columns=["Certificate Error"], inplace=True)
-            st.write("### All In One Results", df_all)
-            csv_buffer = io.StringIO()
-            df_all.to_csv(csv_buffer, index=False)
-            st.download_button("Download All-In-One CSV", csv_buffer.getvalue(), file_name="all_in_one_results.csv", mime="text/csv")
+            st.write("### Advanced Check Results", df_all)
+            st.session_state["adv_df"] = df_all
+            st.download_button("Download Table as CSV", df_all.to_csv(index=False),
+                               file_name=f"Advanced_Check_Results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
+
+            # Save the raw results for advanced statistics in session state
+            st.session_state["all_results"] = all_results
+
+    # Display the advanced statistics inside an expander (initially closed)
+    if "all_results" in st.session_state:
+        with st.expander("View Statistics"):
+            all_results = st.session_state["all_results"]
+            http_times = [res.get("HTTP Response Time (s)") for res in all_results if res.get("HTTP Response Time (s)") is not None]
+            if http_times:
+                avg_time = sum(http_times) / len(http_times)
+                max_time = max(http_times)
+                min_time = min(http_times)
+                slowest_domains = [res["Domain"] for res in all_results if res.get("HTTP Response Time (s)") == max_time]
+                fastest_domains = [res["Domain"] for res in all_results if res.get("HTTP Response Time (s)") == min_time]
+                speed = len(http_times) / sum(http_times) if sum(http_times) > 0 else 0
+                st.write(f"**Total Domains Processed:** {len(http_times)}")
+                st.write(f"**Average HTTP Response Time:** {avg_time:.2f} seconds")
+                if fastest_domains:
+                    st.write(f"The fastest response was from {fastest_domains[0]} taking {min_time:.2f} seconds.")
+                if slowest_domains:
+                    st.write(f"The slowest response was from {slowest_domains[0]} taking {max_time:.2f} seconds.")
+                st.write(f"**Speed per Domain:** {speed:.2f} domains per second")
+            else:
+                st.write("No HTTP response times available for advanced statistics.")
