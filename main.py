@@ -12,7 +12,7 @@ import ssl
 import socket
 import datetime
 
-st.set_page_config(page_title = "Your Page Title", page_icon="./YourIconFileName.ico", layout = "wide")
+st.set_page_config(page_title = "Your Page Title", page_icon="./icon.ico", layout = "wide")
 
 http_headers = {
     "User-Agent": (
