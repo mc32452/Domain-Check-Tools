@@ -12,8 +12,6 @@ import ssl
 import socket
 import datetime
 
-st.set_page_config(page_title = "Your Page Title", page_icon="./icon.ico", layout = "wide")
-
 http_headers = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
