@@ -132,7 +132,7 @@ async def check_http_domain(domain, timeout, retries, session, headers, semaphor
                     else:
                         redirected = "Yes"
                     return (
-                        domain, status, snippet, response_time, 
+                        domain, status, snippet, round(response_time, 2), 
                         attempt, "Yes", redirect_info, redirected
                     )
         except Exception as e:
@@ -140,7 +140,7 @@ async def check_http_domain(domain, timeout, retries, session, headers, semaphor
             await asyncio.sleep(0.5)
     response_time = time.perf_counter() - start_time
     snippet = f"Error occurred: {error_message}"
-    return (domain, None, snippet, response_time, attempt, "No", "No redirect", "No")
+    return (domain, None, snippet, round(response_time, 2), attempt, "No", "No redirect", "No")
 
 async def run_http_checks(domains, timeout, concurrency, retries):
     results = []
