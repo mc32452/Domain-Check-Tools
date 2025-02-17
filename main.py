@@ -438,7 +438,7 @@ with tabs[4]:
         domains_input_all = st.text_area("Enter one or more domains (one per line):", height=200)
         whois_enabled = st.checkbox("Enable WHOIS Lookup *(Slows Down Large Batches)*", value=False, key="all_whois_enabled")
         cert_enabled = st.checkbox("Enable TLS/SSL Certificate Check", value=False, key="all_cert_enabled")
-        st.markdown("### Select DNS Record Types to Look Up")
+        st.markdown("### Select DNS Record Types")
         record_options_all = ["A", "AAAA", "CNAME", "MX", "NS", "SOA", "TXT"]
         selected_dns_all = []
         cols = st.columns(4)
@@ -446,7 +446,11 @@ with tabs[4]:
             col = cols[i % 4]
             if col.checkbox(rtype, value=True, key=f"all_checkbox_{rtype}"):
                 selected_dns_all.append(rtype)
-        st.markdown("### HTTP Settings *(Current settings are recommended)*")       
+        cols = st.columns([2, 1])
+            with cols[0]:
+            st.markdown("### HTTP Settings")
+            with cols[1]:
+            st.markdown("*Current settings are recommended*")       
         timeout_all = st.number_input("HTTP Timeout (seconds)", min_value=1, value=10, step=1)
         concurrency_all = st.number_input("HTTP Concurrency", min_value=1, value=20, step=1)
         retries_all = st.number_input("HTTP Retries", min_value=1, value=3, step=1)
