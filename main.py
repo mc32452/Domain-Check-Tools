@@ -283,7 +283,7 @@ async def run_all_in_one_checks(domains, timeout, concurrency, retries, dns_reco
     return results
 
 st.set_page_config(page_title="Domain Checker", layout="wide")
-st.title("🔍Domain Checker")
+st.title("Domain Checker🔍")
 
 tabs = st.tabs(["HTTP Check", "DNS Lookup", "WHOIS Check", "TLS/SSL Certificate Check", "Advanced Check"])
 
