@@ -447,9 +447,9 @@ with tabs[4]:
             if col.checkbox(rtype, value=True, key=f"all_checkbox_{rtype}"):
                 selected_dns_all.append(rtype)
         cols = st.columns([2, 1])
-            with cols[0]:
+        with cols[0]:
             st.markdown("### HTTP Settings")
-            with cols[1]:
+        with cols[1]:
             st.markdown("*Current settings are recommended*")       
         timeout_all = st.number_input("HTTP Timeout (seconds)", min_value=1, value=10, step=1)
         concurrency_all = st.number_input("HTTP Concurrency", min_value=1, value=20, step=1)
