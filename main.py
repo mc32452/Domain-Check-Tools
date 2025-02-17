@@ -379,6 +379,7 @@ with tabs[1]:
 # --------------------- WHOIS Check Tab --------------------- #
 with tabs[2]:
     st.header("WHOIS Check")
+    st.markdown("Retrieves domain registration details: Registrar, creation date, expiration date, and name servers.")
     with st.form("whois_form"):
         domains_input = st.text_area("Enter one or more domains (one per line):", height=200)
         submit_whois = st.form_submit_button("Run WHOIS Check")
