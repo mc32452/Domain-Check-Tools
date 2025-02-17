@@ -406,6 +406,7 @@ with tabs[2]:
 # --------------------- TLS/SSL Certificate Check Tab --------------------- #
 with tabs[3]:
     st.header("TLS/SSL Certificate Check")
+    st.markdown("Performs a TLS/SSL certificate check for each domain. This check returns the certificate expiry date, calculates the number of days until expiry, and reports any errors encountered.")
     with st.form("cert_form"):
         domains_input_cert = st.text_area("Enter one or more domains (one per line):", height=200)
         submit_cert = st.form_submit_button("Run TLS/SSL Certificate Check")
