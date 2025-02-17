@@ -445,8 +445,7 @@ with tabs[4]:
         for i, rtype in enumerate(record_options_all):
             col = cols[i % 4]
             if col.checkbox(rtype, value=True, key=f"all_checkbox_{rtype}"):
-                selected_dns_all.append(rtype)
-        st.markdown("### HTTP Settings\n*Current settings are recommended*")       
+                selected_dns_all.append(rtype)      
         timeout_all = st.number_input("HTTP Timeout (seconds)", min_value=1, value=10, step=1)
         concurrency_all = st.number_input("HTTP Concurrency", min_value=1, value=20, step=1)
         retries_all = st.number_input("HTTP Retries", min_value=1, value=3, step=1)
