@@ -433,7 +433,7 @@ with tabs[3]:
 # --------------------- Advanced Check Tab --------------------- #
 with tabs[4]:
     st.header("Advanced Check")
-    st.markdown("Combines WHOIS, HTTP, and DNS lookups into one comprehensive report. Provides a full picture of each domain’s registration, server response, and DNS configuration.")
+    st.markdown("Combines HTTP, DNS, WHOIS and TLS/SSL lookups into one comprehensive report. Provides a full picture of each domain’s registration, server response, and DNS configuration.")
     with st.form("all_form"):
         domains_input_all = st.text_area("Enter one or more domains (one per line):", height=200)
         whois_enabled = st.checkbox("Enable WHOIS Lookup *(Slows Down Large Batches)*", value=False, key="all_whois_enabled")
