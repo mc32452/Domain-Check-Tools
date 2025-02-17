@@ -320,6 +320,7 @@ with tabs[0]:
 # --------------------- DNS Lookup Tab --------------------- #
 with tabs[1]:
     st.header("DNS Lookup")
+    st.markdown("Performs DNS record lookups for the specified domains. Select one or more DNS record types (e.g., A, AAAA, MX) to retrieve detailed DNS information for each domain.")
     with st.form("dns_form"):
         domains_input_dns = st.text_area("Enter one or more domains (one per line):", height=150, help="Example: example.com")
         st.markdown("### Select DNS Record Types")
