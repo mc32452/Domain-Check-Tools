@@ -290,6 +290,7 @@ tabs = st.tabs(["HTTP Check", "DNS Lookup", "WHOIS Check", "TLS/SSL Certificate 
 # --------------------- HTTP Check Tab --------------------- #
 with tabs[0]:
     st.header("HTTP Check")
+    st.markdown("Retrieve the HTTP status code, a snippet of the response, response time, and redirection details. Use this to verify website availability and performance.")
     with st.form("http_form"):
         domains_input_http = st.text_area("Enter one or more domains (one per line):", height=200)
         timeout = st.number_input("Timeout (seconds)", min_value=1, value=10, step=1)
