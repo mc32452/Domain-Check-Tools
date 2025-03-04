@@ -3,3 +3,6 @@ requests
 python-whois
 dnspython
 aiohttp
+crtsh
+plotly
+streamlit
