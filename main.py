@@ -246,6 +246,7 @@ async def check_http_domain(domain: str, timeout: int, retries: int, session: ai
                         else:
                             redirect_info = "No redirect"
                         redirected = "Yes" if normalize_url(url) != normalize_url(str(response.url)) else "No"
+
                         return (domain, status, snippet, round(response_time, 2), attempt, "HTTP Success", redirect_info, redirected)
             except Exception as e:
                 last_exception = e
@@ -293,12 +294,12 @@ async def run_http_checks(domains: List[str], timeout: int, concurrency: int, re
         tasks = [check_http_domain(domain, timeout, retries, session, http_headers, semaphore) for domain in domains]
         total = len(tasks)
         completed = 0
-        progress_bar = st.progress(0)
+        progress_bar = st.progress(0, text="Starting HTTP checks...")
         for future in asyncio.as_completed(tasks):
             result = await future
             results.append(result)
             completed += 1
-            progress_bar.progress(int((completed / total) * 100))
+            progress_bar.progress(int((completed / total) * 100), text=f"Processing domain {completed}/{total}...")
     return results
 
 # ------------------------------
@@ -407,20 +408,32 @@ def get_certificate_info(domain: str) -> Tuple[Optional[str], Optional[int], str
 async def process_certificate_check(domain: str) -> Tuple[Optional[str], Optional[int], str]:
     return await asyncio.to_thread(get_certificate_info, domain)
 
-async def run_certificate_checks(domains: List[str]) -> List[Tuple[str, str, str, str]]:
+async def run_certificate_checks(domains: List[str]) -> List[Tuple[str, str, str, str, str]]:
     tasks = [process_certificate_check(domain) for domain in domains]
-    results: List[Tuple[str, str, str, str]] = []
+    results: List[Tuple[str, str, str, str, str]] = []
     total = len(tasks)
-    progress_bar = st.progress(0)
+    progress_bar = st.progress(0, text="Starting certificate checks...")
     for i, task in enumerate(asyncio.as_completed(tasks), start=1):
         cert_expiry_date, days_until_expiry, cert_error = await task
+
+        # Add status column for certificates
+        status = "Valid"
+        if days_until_expiry is not None:
+            if days_until_expiry <= 0:
+                status = "Expired"
+            elif days_until_expiry <= 30:
+                status = "Expiring Soon"
+        else:
+            status = "Error"
+
         results.append((
             domains[i-1],
             cert_expiry_date if cert_expiry_date else "",
             str(days_until_expiry) if days_until_expiry is not None else "",
-            cert_error
+            cert_error,
+            status
         ))
-        progress_bar.progress(int((i / total) * 100))
+        progress_bar.progress(int((i / total) * 100), text=f"Processing certificate {i}/{total}...")
     return results
 
 # ------------------------------
@@ -548,6 +561,18 @@ async def process_all_in_one(
         result["Certificate Expiry Date"] = cert_expiry_date if cert_expiry_date else ""
         result["Days Until Expiry"] = days_until_expiry if days_until_expiry is not None else ""
         result["Certificate Error"] = cert_error
+
+        # Add certificate status
+        if days_until_expiry is not None:
+            if days_until_expiry <= 0:
+                result["Certificate Status"] = "Expired"
+            elif days_until_expiry <= 30:
+                result["Certificate Status"] = "Expiring Soon"
+            else:
+                result["Certificate Status"] = "Valid"
+        else:
+            result["Certificate Status"] = "Error"
+
     if wildcard_enabled:
         wildcard = await check_wildcard_dns(domain)
         result["Wildcard DNS"] = wildcard
@@ -573,12 +598,12 @@ async def run_all_in_one_checks(
         ]
         total = len(tasks)
         completed = 0
-        progress_bar = st.progress(0)
+        progress_bar = st.progress(0, text="Starting comprehensive checks...")
         for future in asyncio.as_completed(tasks):
             result = await future
             results.append(result)
             completed += 1
-            progress_bar.progress(int((completed / total) * 100))
+            progress_bar.progress(int((completed / total) * 100), text=f"Processing domain {completed}/{total}...")
     return results
 
 # ------------------------------
@@ -642,6 +667,40 @@ tabs = st.tabs([
     "Advanced Check"
 ])
 
+# Helper function to apply styling to DataFrames
+def apply_dataframe_styling(df, color_column=None):
+    if color_column is not None and color_column in df.columns:
+        # Create a styled dataframe for display
+        styled_df = df.copy()
+
+        # Add styling for Status/Result Type
+        if color_column == "Result Type":
+            # Define style function for HTTP results
+            def style_result_type(val):
+                if val == "Success":
+                    return 'background-color: #CCFFCC'
+                elif val == "Redirect":
+                    return 'background-color: #FFFFCC'
+                elif val in ["Client Error", "Server Error"]:
+                    return 'background-color: #FFCCCC'
+                elif val in ["DNS Error", "Timeout"]:
+                    return 'background-color: #FFDDDD'
+                elif val == "Warning":
+                    return 'background-color: #FFE8AA'
+                elif val == "TCP Only":
+                    return 'background-color: #E6E6FA'
+                return ''
+
+            # Don't use style for now as st.dataframe doesn't support it well
+            # Just return regular dataframe
+            return df
+
+        elif color_column == "Status" and df[color_column].dtype == 'object':
+            # For certificate status
+            return df
+
+    return df
+
 # HTTP Check Tab
 with tabs[0]:
     st.header("HTTP Check")
@@ -675,13 +734,13 @@ with tabs[0]:
                 df_http["Status"] = df_http["Status"].astype(str)
                 st.write("### HTTP Check Results")
                 st.caption("Double click any cell to view full content.")
-                st.write(df_http)
-                st.session_state["http_df"] = df_http
+                st.dataframe(df_http, use_container_width=True)
+
+                # Store results in a temporary variable, not in session state
+                http_results_df = df_http
                 date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-                st.download_button("Download Table as CSV", df_http.to_csv(index=False),
-                                   file_name=f"HTTP_Check_Results_{date_str}.csv", mime="text/csv")
-    elif "http_df" in st.session_state:
-        st.write("### HTTP Check Results", st.session_state["http_df"])
+                st.download_button("Download Table as CSV", http_results_df.to_csv(index=False),
+                                   file_name=f"HTTP_Check_Results_{date_str}.csv", mime="text/csv", on_click="ignore")
 
 # DNS Lookup Tab
 with tabs[1]:
@@ -701,7 +760,6 @@ with tabs[1]:
         submit_dns = st.form_submit_button("Lookup DNS Records")
 
     if submit_dns:
-        st.session_state.pop("dns_df", None)
         if not domains_input_dns.strip():
             st.error("Please enter at least one domain.")
         elif not selected_record_types:
@@ -717,9 +775,9 @@ with tabs[1]:
             else:
                 total_domains = len(domains_dns)
                 st.write(f"Processing **{total_domains}** domain(s)...")
-                progress_bar = st.progress(0)
+                progress_bar = st.progress(0, text="Starting DNS lookups...")
                 def progress_callback(completed: int, total: int) -> None:
-                    progress_bar.progress(int((completed / total) * 100))
+                    progress_bar.progress(int((completed / total) * 100), text=f"Processing DNS {completed}/{total}...")
                 start_time = time.time()
                 dns_results = asyncio.run(run_dns_checks(domains_dns, selected_record_types, recursive_dns, progress_callback))
                 end_time = time.time()
@@ -740,17 +798,17 @@ with tabs[1]:
                 df_dns = pd.DataFrame(data_rows)
                 st.write("### DNS Results")
                 st.caption("Double click any cell to view full content.")
-                st.write(df_dns)
-                st.session_state["dns_df"] = df_dns
+                st.dataframe(df_dns, use_container_width=True)
+
+                # Store in temporary variable, not in session state
+                dns_results_df = df_dns
                 date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-                csv_data = df_dns.to_csv(index=False)
+                csv_data = dns_results_df.to_csv(index=False)
                 st.download_button("Download Table as CSV", data=csv_data,
-                                   file_name=f"DNS_Lookup_Results_{date_str}.csv", mime="text/csv")
+                                   file_name=f"DNS_Lookup_Results_{date_str}.csv", mime="text/csv", on_click="ignore")
                 with st.expander("View Statistics"):
                     st.write(f"**Time Taken:** {elapsed_time:.2f} seconds")
                     st.write(f"**Processing Speed:** {total_domains / elapsed_time:.2f} domains/second")
-    elif "dns_df" in st.session_state:
-        st.write("### DNS Results", st.session_state["dns_df"])
 
 # WHOIS Lookup Tab
 with tabs[2]:
@@ -780,13 +838,13 @@ with tabs[2]:
                 )
                 st.write("### WHOIS Lookup Results")
                 st.caption("Double click any cell to view full content.")
-                st.write(df_whois)
-                st.session_state["whois_df"] = df_whois
+                st.dataframe(df_whois, use_container_width=True)
+
+                # Store in temporary variable, not in session state
+                whois_results_df = df_whois
                 date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-                st.download_button("Download Table as CSV", df_whois.to_csv(index=False),
-                                   file_name=f"WHOIS_Results_{date_str}.csv", mime="text/csv")
-    elif "whois_df" in st.session_state:
-        st.write("### WHOIS Lookup Results", st.session_state["whois_df"])
+                st.download_button("Download Table as CSV", whois_results_df.to_csv(index=False),
+                                   file_name=f"WHOIS_Results_{date_str}.csv", mime="text/csv", on_click="ignore")
 
 # TLS/SSL Certificate Check Tab
 with tabs[3]:
@@ -812,19 +870,20 @@ with tabs[3]:
                 cert_results = asyncio.run(run_certificate_checks(domains_cert))
                 df_cert = pd.DataFrame(
                     cert_results,
-                    columns=["Domain", "Certificate Expiry Date", "Days Until Expiry", "Certificate Error"]
+                    columns=["Domain", "Certificate Expiry Date", "Days Until Expiry", "Certificate Error", "Status"]
                 )
                 if "Certificate Error" in df_cert.columns and df_cert["Certificate Error"].astype(str).str.strip().eq("").all():
                     df_cert.drop(columns=["Certificate Error"], inplace=True)
                 st.write("### TLS/SSL Certificate Check Results")
                 st.caption("Double click any cell to view full content.")
-                st.write(df_cert)
-                st.session_state["cert_df"] = df_cert
+                styled_df = apply_dataframe_styling(df_cert, "Status")
+                st.dataframe(styled_df, use_container_width=True)
+
+                # Store in temporary variable, not in session state
+                cert_results_df = df_cert
                 date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-                st.download_button("Download Table as CSV", df_cert.to_csv(index=False),
-                                   file_name=f"TLS_SSL_Certificate_Results_{date_str}.csv", mime="text/csv")
-    elif "cert_df" in st.session_state:
-        st.write("### TLS/SSL Certificate Check Results", st.session_state["cert_df"])
+                st.download_button("Download Table as CSV", cert_results_df.to_csv(index=False),
+                                   file_name=f"TLS_SSL_Certificate_Results_{date_str}.csv", mime="text/csv", on_click="ignore")
 
 # Subdomain Finder Tab
 with tabs[4]:
@@ -857,9 +916,9 @@ with tabs[4]:
                         subdomain_list: List[str] = list(subdomains)
                         st.write(f"Found {len(subdomain_list)} unique subdomains.")
 
-                        progress_bar = st.progress(0)
+                        progress_bar = st.progress(0, text="Starting subdomain checks...")
                         def update_progress(value: float) -> None:
-                            progress_bar.progress(value)
+                            progress_bar.progress(value, text=f"Processing subdomains ({int(value*100)}%)...")
                         semaphore = asyncio.Semaphore(20)
                         results = asyncio.run(perform_http_checks(subdomain_list, update_progress, semaphore))
 
@@ -873,11 +932,14 @@ with tabs[4]:
                         flagged_unreachable = [res for res in offline_candidates if res.get("Status") != "DNS Error"]
                         offline_results = [res for res in offline_candidates if res.get("Status") == "DNS Error"]
 
-                        st.session_state["subdomain_results"] = results
-                        st.session_state["subdomain_online"] = online_results
-                        st.session_state["subdomain_flagged"] = flagged_unreachable
-                        st.session_state["subdomain_offline"] = offline_results
-                        st.session_state["searched_domain"] = domain_input
+                        # Store results for current search only
+                        current_search_results = {
+                            "subdomain_results": results,
+                            "subdomain_online": online_results,
+                            "subdomain_flagged": flagged_unreachable,
+                            "subdomain_offline": offline_results,
+                            "searched_domain": domain_input
+                        }
 
                         date_str = datetime.datetime.now().strftime("%d.%m.%Y")
                         df_all_subdomains = pd.DataFrame(results)
@@ -885,18 +947,20 @@ with tabs[4]:
                             label="Download All Subdomain Results as CSV",
                             data=df_all_subdomains.to_csv(index=False).encode("utf-8"),
                             file_name=f"{domain_input}_all_subdomains_{date_str}.csv",
-                            mime="text/csv"
+                            mime="text/csv",
+                            on_click="ignore"
                         )
 
                         st.subheader("Online Subdomains")
                         if online_results:
                             df_online = pd.DataFrame(online_results)
-                            st.write(df_online)
+                            st.dataframe(df_online, use_container_width=True)
                             st.download_button(
                                 label="Download Online Subdomains as CSV",
                                 data=df_online.to_csv(index=False).encode("utf-8"),
                                 file_name=f"{domain_input}_online_subdomains_{date_str}.csv",
-                                mime="text/csv"
+                                mime="text/csv",
+                                on_click="ignore"
                             )
                         else:
                             st.write("No online subdomains found.")
@@ -904,12 +968,13 @@ with tabs[4]:
                         st.subheader("Flagged/Unreachable Subdomains")
                         if flagged_unreachable:
                             df_flagged = pd.DataFrame(flagged_unreachable)
-                            st.write(df_flagged)
+                            st.dataframe(df_flagged, use_container_width=True)
                             st.download_button(
                                 label="Download Flagged/Unreachable Subdomains as CSV",
                                 data=df_flagged.to_csv(index=False).encode("utf-8"),
                                 file_name=f"{domain_input}_flagged_unreachable_subdomains_{date_str}.csv",
-                                mime="text/csv"
+                                mime="text/csv",
+                                on_click="ignore"
                             )
                         else:
                             st.write("No flagged/unreachable subdomains found.")
@@ -917,21 +982,22 @@ with tabs[4]:
                         st.subheader("Offline Subdomains")
                         if offline_results:
                             df_offline = pd.DataFrame(offline_results)
-                            st.write(df_offline)
+                            st.dataframe(df_offline, use_container_width=True)
                             st.download_button(
                                 label="Download Offline Subdomains as CSV",
                                 data=df_offline.to_csv(index=False).encode("utf-8"),
                                 file_name=f"{domain_input}_offline_subdomains_{date_str}.csv",
-                                mime="text/csv"
+                                mime="text/csv",
+                                on_click="ignore"
                             )
                         else:
                             st.write("No offline subdomains found.")
 
                         with st.expander("Graphs"):
                             status_counts = {
-                                "Online": len(st.session_state["subdomain_online"]),
-                                "Flagged/Unreachable": len(st.session_state["subdomain_flagged"]),
-                                "Offline": len(st.session_state["subdomain_offline"])
+                                "Online": len(online_results),
+                                "Flagged/Unreachable": len(flagged_unreachable),
+                                "Offline": len(offline_results)
                             }
                             if sum(status_counts.values()) > 0:
                                 fig_pie = px.pie(
@@ -943,9 +1009,9 @@ with tabs[4]:
                             else:
                                 st.write("No subdomain data available for pie chart.")
 
-                            if st.session_state["subdomain_online"]:
-                                online_subdomains = [res["Subdomain"] for res in st.session_state["subdomain_online"]]
-                                response_times = [res["Response Time (s)"] for res in st.session_state["subdomain_online"]]
+                            if online_results:
+                                online_subdomains = [res["Subdomain"] for res in online_results]
+                                response_times = [res["Response Time (s)"] for res in online_results]
                                 fig_bar = px.bar(
                                     x=online_subdomains,
                                     y=response_times,
@@ -955,6 +1021,13 @@ with tabs[4]:
                                 st.plotly_chart(fig_bar, use_container_width=True)
                             else:
                                 st.write("No online subdomains to display response times.")
+
+                        # Update session state with current search results
+                        st.session_state["subdomain_results"] = current_search_results["subdomain_results"]
+                        st.session_state["subdomain_online"] = current_search_results["subdomain_online"]
+                        st.session_state["subdomain_flagged"] = current_search_results["subdomain_flagged"]
+                        st.session_state["subdomain_offline"] = current_search_results["subdomain_offline"]
+                        st.session_state["searched_domain"] = current_search_results["searched_domain"]
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
     elif st.session_state.get("searched_domain", ""):
@@ -966,13 +1039,14 @@ with tabs[4]:
         st.subheader("Online Subdomains")
         if online_results:
             df_online = pd.DataFrame(online_results)
-            st.write(df_online)
+            st.dataframe(df_online, use_container_width=True)
             date_str = datetime.datetime.now().strftime("%d.%m.%Y")
             st.download_button(
                 label="Download Online Subdomains as CSV",
                 data=df_online.to_csv(index=False).encode("utf-8"),
                 file_name=f"{st.session_state['searched_domain']}_online_subdomains_{date_str}.csv",
-                mime="text/csv"
+                mime="text/csv",
+                on_click="ignore"
             )
         else:
             st.write("No online subdomains found.")
@@ -980,13 +1054,14 @@ with tabs[4]:
         st.subheader("Flagged/Unreachable Subdomains")
         if flagged_unreachable:
             df_flagged = pd.DataFrame(flagged_unreachable)
-            st.write(df_flagged)
+            st.dataframe(df_flagged, use_container_width=True)
             date_str = datetime.datetime.now().strftime("%d.%m.%Y")
             st.download_button(
                 label="Download Flagged/Unreachable Subdomains as CSV",
                 data=df_flagged.to_csv(index=False).encode("utf-8"),
                 file_name=f"{st.session_state['searched_domain']}_flagged_unreachable_subdomains_{date_str}.csv",
-                mime="text/csv"
+                mime="text/csv",
+                on_click="ignore"
             )
         else:
             st.write("No flagged/unreachable subdomains found.")
@@ -994,13 +1069,14 @@ with tabs[4]:
         st.subheader("Offline Subdomains")
         if offline_results:
             df_offline = pd.DataFrame(offline_results)
-            st.write(df_offline)
+            st.dataframe(df_offline, use_container_width=True)
             date_str = datetime.datetime.now().strftime("%d.%m.%Y")
             st.download_button(
                 label="Download Offline Subdomains as CSV",
                 data=df_offline.to_csv(index=False).encode("utf-8"),
                 file_name=f"{st.session_state['searched_domain']}_offline_subdomains_{date_str}.csv",
-                mime="text/csv"
+                mime="text/csv",
+                on_click="ignore"
             )
         else:
             st.write("No offline subdomains found.")
@@ -1092,7 +1168,7 @@ with tabs[5]:
                 st.write(f"**Total Time Taken:** {elapsed_all:.2f} seconds")
                 columns: List[str] = ["Domain", "Status"]
                 if cert_enabled:
-                    columns.extend(["Certificate Expiry Date", "Days Until Expiry"])
+                    columns.extend(["Certificate Expiry Date", "Days Until Expiry", "Certificate Status"])
                 if selected_dns_all:
                     columns.extend(["DNS Records", "Recursive DNS Chain"])
                 if whois_enabled:
@@ -1116,11 +1192,13 @@ with tabs[5]:
                     df_all.drop(columns=["Certificate Error"], inplace=True)
                 st.write("### Advanced Check Results")
                 st.caption("Double click any cell to view full content.")
-                st.write(df_all)
-                st.session_state["adv_df"] = df_all
+                st.dataframe(df_all, use_container_width=True)
+
+                # Store results in temporary variable, not session state
+                all_results_df = df_all
                 date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-                st.download_button("Download Table as CSV", df_all.to_csv(index=False),
-                                   file_name=f"Advanced_Check_Results_{date_str}.csv", mime="text/csv")
+                st.download_button("Download Table as CSV", all_results_df.to_csv(index=False),
+                                   file_name=f"Advanced_Check_Results_{date_str}.csv", mime="text/csv", on_click="ignore")
                 if geolocate_enabled:
                     with st.expander("View Geolocation Map", expanded=False):
                         all_geo_data = []
@@ -1139,24 +1217,24 @@ with tabs[5]:
                             st.map(df_geo)
                         else:
                             st.write("No geolocation data available for mapping.")
-                st.session_state["all_results"] = all_results
-    if "all_results" in st.session_state:
-        with st.expander("View Statistics"):
-            all_results = st.session_state["all_results"]
-            http_times = [res.get("HTTP Response Time (s)") for res in all_results if res.get("HTTP Response Time (s)") is not None]
-            if http_times:
-                avg_time = sum(http_times) / len(http_times)
-                max_time = max(http_times)
-                min_time = min(http_times)
-                slowest_domains = [res["Domain"] for res in all_results if res.get("HTTP Response Time (s)") == max_time]
-                fastest_domains = [res["Domain"] for res in all_results if res.get("HTTP Response Time (s)") == min_time]
-                speed = len(http_times) / sum(http_times) if sum(http_times) > 0 else 0
-                st.write(f"**Total Domains Processed:** {len(http_times)}")
-                st.write(f"**Average HTTP Response Time:** {avg_time:.2f} seconds")
-                if fastest_domains:
-                    st.write(f"The **fastest** response was from {fastest_domains[0]} taking {min_time:.2f} seconds.")
-                if slowest_domains:
-                    st.write(f"The **slowest** response was from {slowest_domains[0]} taking {max_time:.2f} seconds.")
-                st.write(f"**Speed per Domain:** {speed:.2f} domains per second")
-            else:
-                st.write("No HTTP response times available.")
+
+                # Store basic stats for this run only
+                current_all_results = all_results
+                with st.expander("View Statistics"):
+                    http_times = [res.get("HTTP Response Time (s)") for res in current_all_results if res.get("HTTP Response Time (s)") is not None]
+                    if http_times:
+                        avg_time = sum(http_times) / len(http_times)
+                        max_time = max(http_times)
+                        min_time = min(http_times)
+                        slowest_domains = [res["Domain"] for res in current_all_results if res.get("HTTP Response Time (s)") == max_time]
+                        fastest_domains = [res["Domain"] for res in current_all_results if res.get("HTTP Response Time (s)") == min_time]
+                        speed = len(http_times) / sum(http_times) if sum(http_times) > 0 else 0
+                        st.write(f"**Total Domains Processed:** {len(http_times)}")
+                        st.write(f"**Average HTTP Response Time:** {avg_time:.2f} seconds")
+                        if fastest_domains:
+                            st.write(f"The **fastest** response was from {fastest_domains[0]} taking {min_time:.2f} seconds.")
+                        if slowest_domains:
+                            st.write(f"The **slowest** response was from {slowest_domains[0]} taking {max_time:.2f} seconds.")
+                        st.write(f"**Speed per Domain:** {speed:.2f} domains per second")
+                    else:
+                        st.write("No HTTP response times available.")
